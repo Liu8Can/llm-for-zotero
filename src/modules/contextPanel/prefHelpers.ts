@@ -185,11 +185,11 @@ const KNOWN_OLD_BUILTIN_PROMPTS: Record<string, string[]> = {
   ],
 };
 const KNOWN_BUILTIN_DEFAULT_LABELS: Record<string, string[]> = {
-  summarize: ["Summarize", "摘要", "总结论文"],
-  "key-points": ["Key Points", "要点", "核心要点"],
-  methodology: ["Methodology", "方法论", "研究方法"],
-  limitations: ["Limitations", "局限性", "研究局限"],
-  "mermaid-diagram": ["Diagram", "流程图", "图表"],
+  summarize: ["Summarize", "摘要"],
+  "key-points": ["Key Points", "要点"],
+  methodology: ["Methodology", "方法论"],
+  limitations: ["Limitations", "局限性"],
+  "mermaid-diagram": ["Diagram", "流程图"],
 };
 
 export function buildPaperStateKey(
@@ -347,9 +347,6 @@ function getLastConversationModeMap(): Record<string, "global" | "paper"> {
   if (typeof raw !== "string" || !raw.trim()) return {};
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
-    }
     const out: Record<string, "global" | "paper"> = {};
     for (const [key, value] of Object.entries(parsed)) {
       if (value !== "global" && value !== "paper") continue;
@@ -379,9 +376,6 @@ function getLastGlobalConversationMap(): Record<string, number> {
   if (typeof raw !== "string" || !raw.trim()) return {};
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
-    }
     const out: Record<string, number> = {};
     for (const [key, value] of Object.entries(parsed)) {
       const normalized = Number(value);
@@ -777,35 +771,10 @@ function setJsonPref(key: string, value: Record<string, string>): void {
   Zotero.Prefs.set(`${config.prefsPrefix}.${key}`, JSON.stringify(value), true);
 }
 
-export const getShortcutOverrides = (): Record<string, string> => {
-  const raw = getJsonPref("shortcuts");
-  const out: Record<string, string> = {};
-  for (const [id, prompt] of Object.entries(raw)) {
-    if (typeof prompt !== "string") continue;
-    if (
-      BUILTIN_SHORTCUT_IDS.has(id) &&
-      isKnownBuiltinDefaultPrompt(id, prompt)
-    ) {
-      continue;
-    }
-    out[id] = prompt;
-  }
-  return out;
-};
+export const getShortcutOverrides = () => getJsonPref("shortcuts");
 export const setShortcutOverrides = (v: Record<string, string>) =>
   setJsonPref("shortcuts", v);
-export const getShortcutLabelOverrides = (): Record<string, string> => {
-  const raw = getJsonPref("shortcutLabels");
-  const out: Record<string, string> = {};
-  for (const [id, label] of Object.entries(raw)) {
-    if (typeof label !== "string") continue;
-    if (BUILTIN_SHORTCUT_IDS.has(id) && isKnownBuiltinDefaultLabel(id, label)) {
-      continue;
-    }
-    out[id] = label;
-  }
-  return out;
-};
+export const getShortcutLabelOverrides = () => getJsonPref("shortcutLabels");
 export const setShortcutLabelOverrides = (v: Record<string, string>) =>
   setJsonPref("shortcutLabels", v);
 export const getDeletedShortcutIds = () =>
@@ -1027,19 +996,27 @@ export function migrateShortcutDefaultsIfNeeded(): void {
   const prefs = getZoteroPrefs();
   const migrationPref = `${config.prefsPrefix}.${SHORTCUT_DEFAULTS_MIGRATION_PREF_KEY}`;
   const currentVersion = Number(prefs?.get?.(migrationPref, true) || 0);
+  const rawOverrides = getShortcutOverrides();
+  const rawLabelOverrides = getShortcutLabelOverrides();
+  const overrides = normalizeShortcutOverridesForMigration(rawOverrides);
+  const labelOverrides =
+    normalizeShortcutLabelOverridesForMigration(rawLabelOverrides);
+
   if (
     Number.isFinite(currentVersion) &&
     currentVersion >= SHORTCUT_DEFAULTS_MIGRATION_VERSION
   ) {
+    if (
+      Object.keys(overrides).length !== Object.keys(rawOverrides).length ||
+      Object.keys(labelOverrides).length !==
+        Object.keys(rawLabelOverrides).length
+    ) {
+      setShortcutOverrides(overrides);
+      setShortcutLabelOverrides(labelOverrides);
+    }
     return;
   }
 
-  const overrides = normalizeShortcutOverridesForMigration(
-    getShortcutOverrides(),
-  );
-  const labelOverrides = normalizeShortcutLabelOverridesForMigration(
-    getShortcutLabelOverrides(),
-  );
   const deletedIds = dedupeStrings(getDeletedShortcutIds())
     .filter((id) => BUILTIN_SHORTCUT_IDS.has(id))
     .filter((id) => !BUILTIN_IDS_RESTORED_ON_MIGRATION.has(id));

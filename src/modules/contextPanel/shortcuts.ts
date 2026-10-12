@@ -181,7 +181,11 @@ export async function renderShortcuts(
   }
 
   for (const shortcut of visibleCustomShortcuts) {
-    const label = shortcut.label.trim() || t("Custom Shortcut");
+    const rawLabel = shortcut.label.trim();
+    const label =
+      !rawLabel || rawLabel === "Custom Shortcut"
+        ? t("Custom Shortcut")
+        : rawLabel;
     editableShortcutsRaw.push({
       id: shortcut.id,
       kind: "custom",

@@ -1444,14 +1444,26 @@ let currentLocale: string = "auto";
 /**
  * Initialize i18n — call once at plugin startup.
  */
+function normalizeConfiguredLocale(pref: unknown): string {
+  if (typeof pref !== "string") return "auto";
+  const trimmed = pref.trim();
+  if (!trimmed || trimmed === "auto") return "auto";
+  if (
+    /^(en|zh)(?:[-_][A-Za-z0-9]+)?$/i.test(trimmed) ||
+    /^[a-z]{2,3}[-_][A-Za-z]{2,4}$/.test(trimmed)
+  ) {
+    return trimmed;
+  }
+  return "auto";
+}
+
 export function initI18n(): void {
   try {
     const pref = Zotero.Prefs.get(
       "extensions.zotero.llmforzotero.locale",
       true,
     );
-    currentLocale =
-      typeof pref === "string" && pref.trim() ? pref.trim() : "auto";
+    currentLocale = normalizeConfiguredLocale(pref);
   } catch {
     currentLocale = "auto";
   }
@@ -1464,8 +1476,7 @@ function getEffectiveLocale(): string {
       "extensions.zotero.llmforzotero.locale",
       true,
     );
-    configured = typeof pref === "string" && pref.trim() ? pref.trim() : "auto";
-    currentLocale = configured;
+    configured = normalizeConfiguredLocale(pref);
   } catch {
     // Keep last initialized locale when Zotero.Prefs is unavailable.
   }
