@@ -24,6 +24,8 @@ import {
   getShortcutOrder,
   setShortcutOrder,
   createCustomShortcutId,
+  isKnownBuiltinDefaultLabel,
+  isKnownBuiltinDefaultPrompt,
   migrateShortcutDefaultsIfNeeded,
   normalizeShortcutOrderForVisibleIds,
   resetShortcutsToDefault,
@@ -125,6 +127,12 @@ export async function renderShortcuts(
   ) as HTMLButtonElement | null;
   if (!container) return;
 
+  if (menuEdit) menuEdit.textContent = t("Edit");
+  if (menuDelete) menuDelete.textContent = t("Delete");
+  if (menuAdd) menuAdd.textContent = t("Add");
+  if (menuMove) menuMove.textContent = t("Move");
+  if (menuReset) menuReset.textContent = t("Reset");
+
   migrateShortcutDefaultsIfNeeded();
 
   const moveMode = shortcutMoveModeState.get(body) === true;
@@ -160,18 +168,20 @@ export async function renderShortcuts(
         promptText = "";
       }
     }
-    const labelText = (labelOverrides[shortcut.id] || shortcut.label).trim();
+    const defaultLabel = t(shortcut.label);
+    const rawLabelOverride = (labelOverrides[shortcut.id] || "").trim();
+    const labelText = rawLabelOverride || defaultLabel;
     editableShortcutsRaw.push({
       id: shortcut.id,
       kind: "builtin",
       prompt: promptText,
-      label: labelText || shortcut.label,
-      defaultLabel: shortcut.label,
+      label: labelText,
+      defaultLabel,
     });
   }
 
   for (const shortcut of visibleCustomShortcuts) {
-    const label = shortcut.label.trim() || "Custom Shortcut";
+    const label = shortcut.label.trim() || t("Custom Shortcut");
     editableShortcutsRaw.push({
       id: shortcut.id,
       kind: "custom",
@@ -253,7 +263,8 @@ export async function renderShortcuts(
     const prompt = updated.prompt.trim();
     if (!prompt) {
       const status = body.querySelector("#llm-status") as HTMLElement | null;
-      if (status) setStatus(status, "Shortcut prompt cannot be empty", "error");
+      if (status)
+        setStatus(status, t("Shortcut prompt cannot be empty"), "error");
       return;
     }
 
@@ -270,7 +281,7 @@ export async function renderShortcuts(
       if (status) {
         setStatus(
           status,
-          `Maximum ${MAX_EDITABLE_SHORTCUTS} editable shortcuts allowed`,
+          t(`Maximum ${MAX_EDITABLE_SHORTCUTS} editable shortcuts allowed`),
           "error",
         );
       }
@@ -279,7 +290,7 @@ export async function renderShortcuts(
 
     const nextCustomShortcut: CustomShortcut = {
       id: createCustomShortcutId(),
-      label: updated.label.trim() || "Custom Shortcut",
+      label: updated.label.trim() || t("Custom Shortcut"),
       prompt,
     };
     const nextCustomShortcuts = [...currentCustomShortcuts, nextCustomShortcut];
@@ -396,7 +407,7 @@ export async function renderShortcuts(
       ) as HTMLSpanElement;
       handle.className = "llm-shortcut-drag-handle";
       handle.textContent = "≡";
-      handle.title = "Drag to reorder";
+      handle.title = t("Drag to reorder");
       handle.draggable = false;
       handle.addEventListener("click", (e: Event) => {
         e.preventDefault();
@@ -597,7 +608,7 @@ export async function renderShortcuts(
       if (!nextPrompt) {
         const status = body.querySelector("#llm-status") as HTMLElement | null;
         if (status)
-          setStatus(status, "Shortcut prompt cannot be empty", "error");
+          setStatus(status, t("Shortcut prompt cannot be empty"), "error");
         menu.style.display = "none";
         return;
       }
@@ -608,7 +619,7 @@ export async function renderShortcuts(
           shortcut.id === shortcutId
             ? {
                 ...shortcut,
-                label: nextLabel || shortcut.label || "Custom Shortcut",
+                label: nextLabel || shortcut.label || t("Custom Shortcut"),
                 prompt: nextPrompt,
               }
             : shortcut,
@@ -616,14 +627,18 @@ export async function renderShortcuts(
         setCustomShortcuts(nextCustomShortcuts);
       } else {
         const nextOverrides = getShortcutOverrides();
-        nextOverrides[shortcutId] = nextPrompt;
+        if (isKnownBuiltinDefaultPrompt(shortcutId, nextPrompt)) {
+          delete nextOverrides[shortcutId];
+        } else {
+          nextOverrides[shortcutId] = nextPrompt;
+        }
         setShortcutOverrides(nextOverrides);
 
         const nextLabelOverrides = getShortcutLabelOverrides();
-        if (nextLabel) {
-          nextLabelOverrides[shortcutId] = nextLabel;
-        } else {
+        if (!nextLabel || isKnownBuiltinDefaultLabel(shortcutId, nextLabel)) {
           delete nextLabelOverrides[shortcutId];
+        } else {
+          nextLabelOverrides[shortcutId] = nextLabel;
         }
         setShortcutLabelOverrides(nextLabelOverrides);
       }
